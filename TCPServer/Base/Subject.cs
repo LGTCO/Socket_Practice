@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 
 namespace TCPServer.Base
 {
-    internal class Subject<T> where T:Observer
+    internal class Subject<T> where T : Observer
     {
 
-        protected virtual void Attach(T t) => _observers.Add(t);
-        protected virtual void Dettach(T t) => _observers.Remove(t);
-        protected virtual void Notify() => _observers.ForEach(o => o.Update());
+        public virtual void Attach(T t) => _observers.Add(t);
+        public virtual void Dettach(T t) => _observers.Remove(t);
+        public virtual void Notify(string endPoint) => _observers.ForEach(o => o.Update(endPoint));
 
         protected List<T> _observers = new List<T>();
     }

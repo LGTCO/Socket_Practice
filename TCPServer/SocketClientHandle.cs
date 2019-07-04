@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using TCPServer.Base;
 
@@ -12,21 +13,20 @@ namespace TCPServer
     internal class SocketClientHandle:Observer,IDisposable
     {
 
-
-      
-
-        public SocketClientHandle(Socket client)
+        public SocketClientHandle(Socket client,Action<string> receiveData,Action<EndPoint> RemoveSelf)
         {
             this._client = client;
             _isConnect = true;
             _receiveBuffer = new byte[1024 * 1024 * 2];
+            _receiveData = receiveData;
+            _removeSelf = RemoveSelf;
         }
 
         #region Method
         /// <summary>
         /// 接受来自客户端发来的数据
         /// </summary>
-        public void RecevieData(object state)
+        public void ReceiveData(object state)
         {
            
             while (_isConnect)
@@ -34,8 +34,15 @@ namespace TCPServer
                 try
                 {
                     var len = _client.Receive(_receiveBuffer);
+                    if (len <= 0)
+                        break;
+                    
                     var str = this.Encoding.GetString(_receiveBuffer, 0, len);
-                    OnReceiveMsg?.Invoke(str);
+                    if (str.Equals("#CLOSECLIENT"))
+                    {
+                        _removeSelf?.Invoke(TheEndPoint);
+                    }
+                    _receiveData?.Invoke($"接收来自{TheEndPoint}的消息\t：{str}");
                 }
                 catch 
                 {
@@ -46,12 +53,13 @@ namespace TCPServer
         /// <summary>
         /// 向客户端发送数据
         /// </summary>
-        public void SendData(string msg)
+        public void SendData(object msg)
         {
-            byte[] data = this.Encoding.GetBytes(msg);
+            var data = this.Encoding.GetBytes((string)msg);
             try
             {
                 _client.Send(data);
+                SendCallBack?.Invoke(TheEndPoint);
             }
             catch { }
         }
@@ -60,32 +68,32 @@ namespace TCPServer
 
 
         #region 委托
-
-        public Action<string> OnReceiveMsg { get; set; }
-
+        private Action<EndPoint> _removeSelf;
+        private Action<string> _receiveData;
+        public Action<EndPoint> SendCallBack { get; set; }
+        
         #endregion
 
 
-        public override void Update()
+        public override void Update(string endPoint)
         {
-
+            ThreadPool.UnsafeQueueUserWorkItem(SendData, $"{endPoint} 已连接至服务器");
         }
 
         #region 释放
         public void Dispose()
         {
-            _isConnect = false;
-            if (_client != null)
-            {
-                _client.Close();
-                _client = null;
-            }
-            GC.SuppressFinalize(this);
+            _client?.Disconnect(false);
+            _client?.Dispose();
         }
 
-
+        ~SocketClientHandle()
+        {
+            Dispose();
+        }
         #endregion
 
+        public EndPoint TheEndPoint { get; set; }
         public Encoding Encoding { get; set; } = Encoding.UTF8;
 
         /// <summary>

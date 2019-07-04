@@ -8,6 +8,6 @@ namespace TCPServer.Base
 {
     internal abstract class Observer
     {
-        public abstract void Update();
+        public abstract void Update(string endPoint);
     }
 }
