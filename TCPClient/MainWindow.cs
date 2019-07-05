@@ -17,7 +17,7 @@ namespace TCPClient
         public MainWindow()
         {
             InitializeComponent();
-            this.Closed += MainWindow_Closed;
+            Closed += MainWindow_Closed; 
         }
 
         private void MainWindow_Closed(object sender, EventArgs e)
@@ -37,11 +37,18 @@ namespace TCPClient
                 && port == _clientSocket.Port)
                 return;
 
-            _clientSocket = new TCPClientSocket(new IPEndPoint(address, port), SendMsgCallBack, 1024 * 1024 * 2);
+            _clientSocket = new TcpClientSocket(new IPEndPoint(address, port), SendMsgCallBack, 1024 * 1024 * 2);
             _clientSocket.OnReceiveMsg += OnReceiveMsg;
+            _clientSocket.ConnectError += ConnectError;
             _clientSocket.Connect();
 
         }
+
+        private void ConnectError(string errorInfo)
+        {
+            Show(errorInfo);
+        }
+
         private void Btn_Send_Click(object sender, EventArgs e)
         {
             if(!_clientSocket.IsConnect
@@ -71,10 +78,14 @@ namespace TCPClient
             }
 
             ListBox_Info.Items.Add(msg);
+            if (ListBox_Info.Items.Count > 5)
+            {
+                ListBox_Info.TopIndex = ListBox_Info.Items.Count - 1;
+            }
         }
 
 
-        private TCPClientSocket _clientSocket;
+        private TcpClientSocket _clientSocket;
 
     }
 }

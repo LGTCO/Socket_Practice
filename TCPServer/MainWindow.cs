@@ -18,7 +18,12 @@ namespace TCPServer
         public MainWindow()
         {
             InitializeComponent();
-            
+            Closed += MainWindow_Closed;
+        }
+
+        private void MainWindow_Closed(object sender, EventArgs e)
+        {
+            _serverSocket.Close();
         }
 
         private void Btn_StartMonitor_Click(object sender, EventArgs e)
@@ -34,23 +39,16 @@ namespace TCPServer
                && port == _serverSocket.Port)
                 return;
 
+            listBox_Info.Items.Clear();
             _serverSocket = new TcpServerSocket(new IPEndPoint(address,port));
             _serverSocket.ClientConnect += OnClientConnect;
             _serverSocket.ReceiveMsg += ReceiveMsg;
-            _serverSocket.RemoveClient += RemoveClient;
+            _serverSocket.StartListen += StartListen;
             _serverSocket.Start();
         }
 
-        private void RemoveClient(EndPoint endPoint)
-        {
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action<EndPoint>(RemoveClient), endPoint);
-            }
+       
 
-            EndPointBox.Items.Remove(endPoint.ToString());
-            AddItemToInfoList($"{endPoint} 客户端被移除");
-        }
 
         private void Btn_Send_Click(object sender, EventArgs e)
         {
@@ -58,31 +56,17 @@ namespace TCPServer
                 return;
             if (EndPointBox.SelectedItem != null)
             {
-            
-               var clientHandle = _serverSocket.GetClientHandle(EndPointBox.SelectedItem.ToString());
-               if (clientHandle.SendCallBack == null)
-               {
-                   clientHandle.SendCallBack += SendCallBack;
-               }
-               var thread = new Thread(clientHandle.SendData);
-               thread.Start(Txt_SendContent.Text);
+                _serverSocket.SendMessageToOne(EndPointBox.SelectedItem.ToString(),Txt_SendContent.Text, SendCallBack);
             }
             else
             {
-                _serverSocket.ObserverList.ForEach(o =>
-                {
-                    ThreadPool.UnsafeQueueUserWorkItem(o.SendData, Txt_SendContent.Text);
-
-                });
+               _serverSocket.SendMessageToAll(Txt_SendContent.Text);
             }
 
         }
-        private void Btn_RemoveClient_Click(object sender, EventArgs e)
+        private void StartListen()
         {
-            if(EndPointBox.SelectedItem == null)
-                return;
-            var handle = _serverSocket.GetClientHandle(EndPointBox.SelectedItem.ToString());
-            _serverSocket.Dettach(handle);
+            AddItemToInfoList("开始监听");
         }
         private void SendCallBack(EndPoint obj)
         {

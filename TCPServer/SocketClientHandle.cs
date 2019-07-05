@@ -13,23 +13,22 @@ namespace TCPServer
     internal class SocketClientHandle:Observer,IDisposable
     {
 
-        public SocketClientHandle(Socket client,Action<string> receiveData,Action<EndPoint> RemoveSelf)
+        public SocketClientHandle(Socket client,Action<string> receiveData)
         {
             this._client = client;
-            _isConnect = true;
+            IsConnect = true;
             _receiveBuffer = new byte[1024 * 1024 * 2];
             _receiveData = receiveData;
-            _removeSelf = RemoveSelf;
         }
 
-        #region Method
+     
         /// <summary>
         /// 接受来自客户端发来的数据
         /// </summary>
         public void ReceiveData(object state)
         {
            
-            while (_isConnect)
+            while (IsConnect)
             {
                 try
                 {
@@ -38,10 +37,6 @@ namespace TCPServer
                         break;
                     
                     var str = this.Encoding.GetString(_receiveBuffer, 0, len);
-                    if (str.Equals("#CLOSECLIENT"))
-                    {
-                        _removeSelf?.Invoke(TheEndPoint);
-                    }
                     _receiveData?.Invoke($"接收来自{TheEndPoint}的消息\t：{str}");
                 }
                 catch 
@@ -63,24 +58,12 @@ namespace TCPServer
             }
             catch { }
         }
-
-        #endregion
-
-
-        #region 委托
-        private Action<EndPoint> _removeSelf;
-        private Action<string> _receiveData;
-        public Action<EndPoint> SendCallBack { get; set; }
-        
-        #endregion
-
-
+    
         public override void Update(string endPoint)
         {
             ThreadPool.UnsafeQueueUserWorkItem(SendData, $"{endPoint} 已连接至服务器");
         }
 
-        #region 释放
         public void Dispose()
         {
             _client?.Disconnect(false);
@@ -91,7 +74,15 @@ namespace TCPServer
         {
             Dispose();
         }
-        #endregion
+        /// <summary>
+        /// 接收到消息后执行
+        /// </summary>
+        private Action<string> _receiveData;
+        /// <summary>
+        /// 发送消息后执行
+        /// </summary>
+        public Action<EndPoint> SendCallBack { get; set; }
+        
 
         public EndPoint TheEndPoint { get; set; }
         public Encoding Encoding { get; set; } = Encoding.UTF8;
@@ -100,16 +91,7 @@ namespace TCPServer
         /// 与客户端相关联的socket
         /// </summary>
         private Socket _client;
-
-        /// <summary>
-        /// 标识是否与客户端相连接
-        /// </summary>
-        private bool _isConnect;
-        public bool IsConnect
-        {
-            get { return _isConnect; }
-            set { _isConnect = value; }
-        }
+        public bool IsConnect { get; set; }
 
         /// <summary>
         /// 数据接受缓冲区

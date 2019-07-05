@@ -12,11 +12,15 @@ using TCPServer.Base;
 
 namespace TCPServer
 {
-    internal class TcpServerSocket:Subject<SocketClientHandle>
+    internal class TcpServerSocket : Subject<SocketClientHandle>
     {
 
+        /// <summary>
+        /// 同步Socket TCP服务器
+        /// </summary>
+        /// <param name="listenPort">监听的端口</param>
         public TcpServerSocket(int listenPort)
-            : this(IPAddress.Any, listenPort, 1024)
+            : this(IPAddress.Any, listenPort)
         {
         }
 
@@ -25,7 +29,7 @@ namespace TCPServer
         /// </summary>
         /// <param name="localEP">监听的终结点</param>
         public TcpServerSocket(IPEndPoint localEP)
-            : this(localEP.Address, localEP.Port, 1024)
+            : this(localEP.Address, localEP.Port)
         {
         }
 
@@ -34,14 +38,12 @@ namespace TCPServer
         /// </summary>
         /// <param name="localIPAddress">监听的IP地址</param>
         /// <param name="listenPort">监听的端口</param>
-        /// <param name="maxClient">最大客户端数量</param>
-        public TcpServerSocket(IPAddress localIPAddress, int listenPort, int maxClient)
+        public TcpServerSocket(IPAddress localIPAddress, int listenPort)
         {
             this.IpAddress = localIPAddress;
             this.Port = listenPort;
 
             ObserverList = _observers;
-            _maxClient = maxClient;
             _serverSocket = new Socket(localIPAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
         }
 
@@ -49,15 +51,15 @@ namespace TCPServer
         {
             return ObserverList.SingleOrDefault(c => c.TheEndPoint.ToString() == endPoint);
         }
-        
+
 
         public void Start()
         {
             if (IsRunning)
                 return;
-            
+
             IsRunning = true;
-            
+
             _serverSocket.Bind(new IPEndPoint(this.IpAddress, this.Port));
             var thread = new Thread(Listen);
             thread.Start();
@@ -65,12 +67,13 @@ namespace TCPServer
 
         private void Listen()
         {
+            StartListen?.Invoke();
             _serverSocket.Listen(16);
             while (IsRunning)
             {
                 var clientSocket = _serverSocket.Accept();
-                _clientCount++;
-                var handle = new SocketClientHandle(clientSocket, OnReceiveData, RemoveClient)
+                
+                var handle = new SocketClientHandle(clientSocket, OnReceiveData)
                 {
                     IsConnect = true,
                     TheEndPoint = clientSocket.RemoteEndPoint,
@@ -86,18 +89,59 @@ namespace TCPServer
         {
             ReceiveMsg?.Invoke(msg);
         }
-
-
-        public override void Dettach(SocketClientHandle t)
+        /// <summary>
+        /// 向某个客户端发送消息
+        /// </summary>
+        /// <param name="endPoint">终端号</param>
+        /// <param name="message">发送消息的内容</param>
+        /// <param name="callBack">消息发送完成后的回调函数</param>
+        public void SendMessageToOne(string endPoint,string message,Action<EndPoint> callBack)
         {
-            
-            t.SendData("#PLEASECLOSE");
-            base.Dettach(t);
-            t.Dispose();
+            var handle = _observers.SingleOrDefault(o => o.TheEndPoint.ToString() == endPoint);
+            if(handle == null)
+                return;
+            if (handle.SendCallBack == null)
+            {
+                handle.SendCallBack = callBack;
+            }
+
+            var thread = new Thread(handle.SendData);
+            thread.Start($"{IpAddress}:{Port}：{message}");
+        }
+        /// <summary>
+        /// 向所有连接的客户端发送消息
+        /// </summary>
+        /// <param name="message">消息内容</param>
+        public void SendMessageToAll(string message)
+        {
+            _observers.ForEach(o =>
+            {
+                ThreadPool.UnsafeQueueUserWorkItem(o.SendData,$"{IpAddress}:{Port}：{message}");
+            });
         }
 
-        public Action<EndPoint> RemoveClient { get; set; }
+        public void Close()
+        {
+            _serverSocket.Close();
+            _serverSocket.Dispose();
+        }
+        //public override void Dettach(SocketClientHandle t)
+        //{
+        //    base.Dettach(t);
+        //    t.Dispose();
+        //}
+        
+        /// <summary>
+        /// 服务器开始监听时执行
+        /// </summary>
+        public Action StartListen { get; set; }
+        /// <summary>
+        /// 有客户端连接后执行
+        /// </summary>
         public Action<EndPoint> ClientConnect { get; set; }
+        /// <summary>
+        /// 接收消息后执行
+        /// </summary>
         public Action<string> ReceiveMsg { get; set; }
 
         public List<SocketClientHandle> ObserverList { get; }
@@ -107,8 +151,5 @@ namespace TCPServer
         public Encoding Encoding { get; set; } = Encoding.UTF8;
 
         private readonly Socket _serverSocket;
-        private int _maxClient;
-        private int _clientCount = 0;
-
     }
 }
